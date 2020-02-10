@@ -947,7 +947,7 @@ PycRef<ASTNode> BuildFromCode(PycRef<PycCode> code, PycModule* mod)
         case Pyc::POP_JUMP_IF_TRUE_A:
             {
                 PycRef<ASTNode> cond = stack.top();
-                PycRef<ASTCondBlock> ifblk;
+                PycRef<ASTBlock> ifblk;
                 int popped = ASTCondBlock::UNINITED;
 
                 if (opcode == Pyc::POP_JUMP_IF_FALSE_A
@@ -1033,19 +1033,19 @@ PycRef<ASTNode> BuildFromCode(PycRef<PycCode> code, PycModule* mod)
                     }
                     ifblk = new ASTCondBlock(top->blktype(), offs, newcond, neg);
                 } else if (curblock->blktype() == ASTBlock::BLK_FOR
-                            && curblock.cast<ASTIterBlock>()->isComprehension()
-                            && mod->verCompare(2, 7) >= 0) {
+                            && curblock.cast<ASTIterBlock>()->isComprehension()) {
                     /* Comprehension condition */
                     curblock.cast<ASTIterBlock>()->setCondition(cond);
+
                     stack_hist.pop();
-                    // TODO: Handle older python versions, where condition
-                    // is laid out a little differently.
-                    break;
+                    blocks.pop();
+                    ifblk = curblock;
                 } else {
                     /* Plain old if statement */
                     ifblk = new ASTCondBlock(ASTBlock::BLK_IF, offs, cond, neg);
                 }
 
+                /* this could be enclosed in an if (ifblk) but all code-paths should assign it to something */
                 if (popped)
                     ifblk->init(popped);
 
@@ -1082,6 +1082,9 @@ PycRef<ASTNode> BuildFromCode(PycRef<PycCode> code, PycModule* mod)
                             blocks.top()->append(curblock.cast<ASTNode>());
                             curblock = blocks.top();
                         }
+                    } else if (curblock->blktype() == ASTBlock::BLK_MAIN) {
+                        // mains cannot have jump_absolute? ignore them
+                        break;
                     } else {
                         curblock->append(new ASTKeyword(ASTKeyword::KW_CONTINUE));
                     }
@@ -1482,7 +1485,8 @@ PycRef<ASTNode> BuildFromCode(PycRef<PycCode> code, PycModule* mod)
                     break;
                 }
 
-                curblock->append(value);
+                if(value->type() != ASTNode::NODE_OBJECT)
+                    curblock->append(value);
 
                 if (curblock->blktype() == ASTBlock::BLK_FOR
                         && curblock.cast<ASTIterBlock>()->isComprehension()) {
