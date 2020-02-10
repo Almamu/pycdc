@@ -38,6 +38,12 @@ PycRef<ASTNode> BuildFromCode(PycRef<PycCode> code, PycModule* mod)
     bool else_pop = false;
     bool need_try = false;
 
+#define STACK_HIST_NOT_EMPTY_GUARD()                                        \
+if (stack_hist.empty()) {                                                   \
+    fprintf(stderr, "Stack hist cannot be empty on line %d\n", __LINE__);   \
+    break;                                                                  \
+}
+
     while (!source.atEof()) {
 #if defined(BLOCK_DEBUG) || defined(STACK_DEBUG)
         fprintf(stderr, "%-7d", pos);
@@ -85,6 +91,7 @@ PycRef<ASTNode> BuildFromCode(PycRef<PycCode> code, PycModule* mod)
                     /* We want to keep the stack the same, but we need to pop
                      * a level off the history. */
                     //stack = stack_hist.top();
+                    // FIXME: Should this one be checked or is this the intended way here?
                     if (!stack_hist.empty())
                         stack_hist.pop();
                 }
@@ -411,11 +418,13 @@ PycRef<ASTNode> BuildFromCode(PycRef<PycCode> code, PycModule* mod)
                 if (loadbuild_type == ASTNode::NODE_LOADBUILDCLASS) {
                     PycRef<ASTNode> call = new ASTCall(function, pparamList, kwparamList);
                     stack.push(new ASTClass(call, new ASTTuple(bases), name));
+                    STACK_HIST_NOT_EMPTY_GUARD()
                     stack_hist.pop();
                     break;
                 }
                 else
                 {
+                    STACK_HIST_NOT_EMPTY_GUARD()
                     stack = stack_hist.top();
                     stack_hist.pop();
                 }
@@ -684,6 +693,7 @@ PycRef<ASTNode> BuildFromCode(PycRef<PycCode> code, PycModule* mod)
                     PycRef<ASTBlock> final = curblock;
                     blocks.pop();
 
+                    STACK_HIST_NOT_EMPTY_GUARD()
                     stack = stack_hist.top();
                     stack_hist.pop();
 
@@ -705,6 +715,7 @@ PycRef<ASTNode> BuildFromCode(PycRef<PycCode> code, PycModule* mod)
                         blocks.push(elseblk);
                         curblock = blocks.top();
                     } else {
+                        STACK_HIST_NOT_EMPTY_GUARD()
                         stack = stack_hist.top();
                         stack_hist.pop();
                     }
@@ -986,6 +997,7 @@ PycRef<ASTNode> BuildFromCode(PycRef<PycCode> code, PycModule* mod)
                         blocks.pop();
                         curblock = blocks.top();
 
+                        STACK_HIST_NOT_EMPTY_GUARD()
                         stack_hist.pop();
                     }
                     ifblk = new ASTCondBlock(ASTBlock::BLK_EXCEPT, offs, cond.cast<ASTCompare>()->right(), false);
@@ -993,6 +1005,7 @@ PycRef<ASTNode> BuildFromCode(PycRef<PycCode> code, PycModule* mod)
                            && curblock->size() == 0) {
                     /* Collapse into elif statement */
                     blocks.pop();
+                    STACK_HIST_NOT_EMPTY_GUARD()
                     stack = stack_hist.top();
                     stack_hist.pop();
                     ifblk = new ASTCondBlock(ASTBlock::BLK_ELIF, offs, cond, neg);
@@ -1004,6 +1017,7 @@ PycRef<ASTNode> BuildFromCode(PycRef<PycCode> code, PycModule* mod)
                     ifblk = new ASTCondBlock(top->blktype(), offs, cond, neg);
 
                     /* We don't store the stack for loops! Pop it! */
+                    STACK_HIST_NOT_EMPTY_GUARD()
                     stack_hist.pop();
                 } else if (curblock->size() == 0 && curblock->end() <= offs
                            && (curblock->blktype() == ASTBlock::BLK_IF
@@ -1015,10 +1029,13 @@ PycRef<ASTNode> BuildFromCode(PycRef<PycCode> code, PycModule* mod)
                     blocks.pop();
 
                     if (curblock->blktype() == ASTBlock::BLK_WHILE) {
+                        STACK_HIST_NOT_EMPTY_GUARD()
                         stack_hist.pop();
                     } else {
+                        STACK_HIST_NOT_EMPTY_GUARD()
                         FastStack s_top = stack_hist.top();
                         stack_hist.pop();
+                        STACK_HIST_NOT_EMPTY_GUARD()
                         stack_hist.pop();
                         stack_hist.push(s_top);
                     }
@@ -1037,6 +1054,7 @@ PycRef<ASTNode> BuildFromCode(PycRef<PycCode> code, PycModule* mod)
                             && mod->verCompare(2, 7) >= 0) {
                     /* Comprehension condition */
                     curblock.cast<ASTIterBlock>()->setCondition(cond);
+                    STACK_HIST_NOT_EMPTY_GUARD()
                     stack_hist.pop();
                     // TODO: Handle older python versions, where condition
                     // is laid out a little differently.
@@ -1069,6 +1087,7 @@ PycRef<ASTNode> BuildFromCode(PycRef<PycCode> code, PycModule* mod)
                         blocks.pop();
                         curblock = blocks.top();
                     } else if (curblock->blktype() == ASTBlock::BLK_ELSE) {
+                        STACK_HIST_NOT_EMPTY_GUARD()
                         stack = stack_hist.top();
                         stack_hist.pop();
 
@@ -1102,6 +1121,7 @@ PycRef<ASTNode> BuildFromCode(PycRef<PycCode> code, PycModule* mod)
                     break;
                 }
 
+                STACK_HIST_NOT_EMPTY_GUARD()
                 stack = stack_hist.top();
                 stack_hist.pop();
 
@@ -1139,6 +1159,7 @@ PycRef<ASTNode> BuildFromCode(PycRef<PycCode> code, PycModule* mod)
                         /* Special case */
                         prev = blocks.top();
                         if (!push) {
+                            STACK_HIST_NOT_EMPTY_GUARD()
                             stack = stack_hist.top();
                             stack_hist.pop();
                         }
@@ -1179,10 +1200,9 @@ PycRef<ASTNode> BuildFromCode(PycRef<PycCode> code, PycModule* mod)
                     break;
                 }
 
-                if (!stack_hist.empty()) {
-                    stack = stack_hist.top();
-                    stack_hist.pop();
-                }
+                STACK_HIST_NOT_EMPTY_GUARD()
+                stack = stack_hist.top();
+                stack_hist.pop();
 
                 PycRef<ASTBlock> prev = curblock;
                 PycRef<ASTBlock> nil;
@@ -1229,6 +1249,7 @@ PycRef<ASTNode> BuildFromCode(PycRef<PycCode> code, PycModule* mod)
                         /* Special case */
                         prev = blocks.top();
                         if (!push) {
+                            STACK_HIST_NOT_EMPTY_GUARD()
                             stack = stack_hist.top();
                             stack_hist.pop();
                         }
@@ -1241,6 +1262,7 @@ PycRef<ASTNode> BuildFromCode(PycRef<PycCode> code, PycModule* mod)
                     } else if (prev->blktype() == ASTBlock::BLK_TRY
                             && prev->end() < pos+operand) {
                         /* Need to add an except/finally block */
+                        STACK_HIST_NOT_EMPTY_GUARD()
                         stack = stack_hist.top();
                         stack.pop();
 
@@ -1395,12 +1417,9 @@ PycRef<ASTNode> BuildFromCode(PycRef<PycCode> code, PycModule* mod)
                         || curblock->blktype() == ASTBlock::BLK_TRY
                         || curblock->blktype() == ASTBlock::BLK_EXCEPT
                         || curblock->blktype() == ASTBlock::BLK_FINALLY) {
-                    if (!stack_hist.empty()) {
-                        stack = stack_hist.top();
-                        stack_hist.pop();
-                    } else {
-                        fprintf(stderr, "Warning: Stack history is empty, something wrong might have happened\n");
-                    }
+                    STACK_HIST_NOT_EMPTY_GUARD()
+                    stack = stack_hist.top();
+                    stack_hist.pop();
                 }
 
                 tmp = curblock;
@@ -1425,6 +1444,7 @@ PycRef<ASTNode> BuildFromCode(PycRef<PycCode> code, PycModule* mod)
                 if (curblock->blktype() == ASTBlock::BLK_TRY
                         && tmp->blktype() != ASTBlock::BLK_FOR
                         && tmp->blktype() != ASTBlock::BLK_WHILE) {
+                    STACK_HIST_NOT_EMPTY_GUARD()
                     stack = stack_hist.top();
                     stack_hist.pop();
 
@@ -1571,6 +1591,7 @@ PycRef<ASTNode> BuildFromCode(PycRef<PycCode> code, PycModule* mod)
                         || curblock->blktype() == ASTBlock::BLK_ELSE)
                         && stack_hist.size()
                         && (mod->verCompare(2, 6) >= 0)) {
+                    STACK_HIST_NOT_EMPTY_GUARD()
                     stack = stack_hist.top();
                     stack_hist.pop();
 
@@ -1593,6 +1614,7 @@ PycRef<ASTNode> BuildFromCode(PycRef<PycCode> code, PycModule* mod)
                         || curblock->blktype() == ASTBlock::BLK_ELSE)
                         && stack_hist.size()
                         && (mod->verCompare(2, 6) >= 0)) {
+                    STACK_HIST_NOT_EMPTY_GUARD()
                     stack = stack_hist.top();
                     stack_hist.pop();
 
