@@ -44,6 +44,12 @@ if (stack_hist.empty()) {                                                   \
     break;                                                                  \
 }
 
+#define BLOCKS_NOT_EMPTY_GUARD()                                            \
+if (blocks.empty()) {                                                       \
+    fprintf(stderr, "Blocks cannot be empty on line %d\n", __LINE__);       \
+    break;                                                                  \
+}
+
     while (!source.atEof()) {
 #if defined(BLOCK_DEBUG) || defined(STACK_DEBUG)
         fprintf(stderr, "%-7d", pos);
@@ -95,6 +101,7 @@ if (stack_hist.empty()) {                                                   \
                     if (!stack_hist.empty())
                         stack_hist.pop();
                 }
+                BLOCKS_NOT_EMPTY_GUARD()
                 blocks.pop();
 
                 if (blocks.empty())
@@ -674,7 +681,6 @@ if (stack_hist.empty()) {                                                   \
                     first.push(node);
                     second.push(node);
                 }
-
                 while (first.size()) {
                     stack.push(first.top());
                     first.pop();
@@ -691,18 +697,22 @@ if (stack_hist.empty()) {                                                   \
                 bool isFinally = false;
                 if (curblock->blktype() == ASTBlock::BLK_FINALLY) {
                     PycRef<ASTBlock> final = curblock;
+                    BLOCKS_NOT_EMPTY_GUARD()
                     blocks.pop();
 
                     STACK_HIST_NOT_EMPTY_GUARD()
                     stack = stack_hist.top();
                     stack_hist.pop();
 
+                    BLOCKS_NOT_EMPTY_GUARD()
                     curblock = blocks.top();
                     curblock->append(final.cast<ASTNode>());
                     isFinally = true;
                 } else if (curblock->blktype() == ASTBlock::BLK_EXCEPT) {
                     /* Turn it into an else statement. */
+                    BLOCKS_NOT_EMPTY_GUARD()
                     blocks.pop();
+                    BLOCKS_NOT_EMPTY_GUARD()
                     PycRef<ASTBlock> prev = curblock;
                     if (curblock->size() != 0) {
                         blocks.top()->append(curblock.cast<ASTNode>());
@@ -713,6 +723,7 @@ if (stack_hist.empty()) {                                                   \
                         PycRef<ASTBlock> elseblk = new ASTBlock(ASTBlock::BLK_ELSE, prev->end());
                         elseblk->init();
                         blocks.push(elseblk);
+                        BLOCKS_NOT_EMPTY_GUARD()
                         curblock = blocks.top();
                     } else {
                         STACK_HIST_NOT_EMPTY_GUARD()
@@ -726,7 +737,9 @@ if (stack_hist.empty()) {                                                   \
                     PycRef<ASTContainerBlock> cont = curblock.cast<ASTContainerBlock>();
                     if (!cont->hasFinally() || isFinally) {
                         /* If there's no finally block, pop the container. */
+                        BLOCKS_NOT_EMPTY_GUARD()
                         blocks.pop();
+                        BLOCKS_NOT_EMPTY_GUARD()
                         curblock = blocks.top();
                         curblock->append(cont.cast<ASTNode>());
                     }
@@ -752,6 +765,7 @@ if (stack_hist.empty()) {                                                   \
                 /* Pop it? Don't pop it? */
 
                 bool comprehension = false;
+                BLOCKS_NOT_EMPTY_GUARD()
                 PycRef<ASTBlock> top = blocks.top();
                 if (top->blktype() == ASTBlock::BLK_WHILE) {
                     blocks.pop();
@@ -761,6 +775,7 @@ if (stack_hist.empty()) {                                                   \
                 PycRef<ASTIterBlock> forblk = new ASTIterBlock(ASTBlock::BLK_FOR, top->end(), iter);
                 forblk->setComprehension(comprehension);
                 blocks.push(forblk.cast<ASTBlock>());
+                BLOCKS_NOT_EMPTY_GUARD()
                 curblock = blocks.top();
 
                 stack.push(NULL);
@@ -774,6 +789,7 @@ if (stack_hist.empty()) {                                                   \
                 stack.pop();
 
                 bool comprehension = false;
+                BLOCKS_NOT_EMPTY_GUARD()
                 PycRef<ASTBlock> top = blocks.top();
                 if (top->blktype() == ASTBlock::BLK_WHILE) {
                     blocks.pop();
@@ -783,6 +799,7 @@ if (stack_hist.empty()) {                                                   \
                 PycRef<ASTIterBlock> forblk = new ASTIterBlock(ASTBlock::BLK_FOR, top->end(), iter);
                 forblk->setComprehension(comprehension);
                 blocks.push(forblk.cast<ASTBlock>());
+                BLOCKS_NOT_EMPTY_GUARD()
                 curblock = blocks.top();
 
                 /* Python Docs say:
@@ -994,7 +1011,9 @@ if (stack_hist.empty()) {                                                   \
                         && cond.cast<ASTCompare>()->op() == ASTCompare::CMP_EXCEPTION) {
                     if (curblock->blktype() == ASTBlock::BLK_EXCEPT
                             && curblock.cast<ASTCondBlock>()->cond() == NULL) {
+                        BLOCKS_NOT_EMPTY_GUARD()
                         blocks.pop();
+                        BLOCKS_NOT_EMPTY_GUARD()
                         curblock = blocks.top();
 
                         STACK_HIST_NOT_EMPTY_GUARD()
@@ -1004,6 +1023,7 @@ if (stack_hist.empty()) {                                                   \
                 } else if (curblock->blktype() == ASTBlock::BLK_ELSE
                            && curblock->size() == 0) {
                     /* Collapse into elif statement */
+                    BLOCKS_NOT_EMPTY_GUARD()
                     blocks.pop();
                     STACK_HIST_NOT_EMPTY_GUARD()
                     stack = stack_hist.top();
@@ -1012,7 +1032,9 @@ if (stack_hist.empty()) {                                                   \
                 } else if (curblock->size() == 0 && !curblock->inited()
                            && curblock->blktype() == ASTBlock::BLK_WHILE) {
                     /* The condition for a while loop */
+                    BLOCKS_NOT_EMPTY_GUARD()
                     PycRef<ASTBlock> top = blocks.top();
+                    BLOCKS_NOT_EMPTY_GUARD()
                     blocks.pop();
                     ifblk = new ASTCondBlock(top->blktype(), offs, cond, neg);
 
@@ -1026,6 +1048,7 @@ if (stack_hist.empty()) {                                                   \
                     PycRef<ASTNode> newcond;
                     PycRef<ASTCondBlock> top = curblock.cast<ASTCondBlock>();
                     PycRef<ASTNode> cond1 = top->cond();
+                    BLOCKS_NOT_EMPTY_GUARD()
                     blocks.pop();
 
                     if (curblock->blktype() == ASTBlock::BLK_WHILE) {
@@ -1084,20 +1107,26 @@ if (stack_hist.empty()) {                                                   \
                             comp->addGenerator(curblock.cast<ASTIterBlock>());
                         }
 
+                        BLOCKS_NOT_EMPTY_GUARD()
                         blocks.pop();
+                        BLOCKS_NOT_EMPTY_GUARD()
                         curblock = blocks.top();
                     } else if (curblock->blktype() == ASTBlock::BLK_ELSE) {
                         STACK_HIST_NOT_EMPTY_GUARD()
                         stack = stack_hist.top();
                         stack_hist.pop();
 
+                        BLOCKS_NOT_EMPTY_GUARD()
                         blocks.pop();
+                        BLOCKS_NOT_EMPTY_GUARD()
                         blocks.top()->append(curblock.cast<ASTNode>());
                         curblock = blocks.top();
 
                         if (curblock->blktype() == ASTBlock::BLK_CONTAINER
                                 && !curblock.cast<ASTContainerBlock>()->hasFinally()) {
+                            BLOCKS_NOT_EMPTY_GUARD()
                             blocks.pop();
+                            BLOCKS_NOT_EMPTY_GUARD()
                             blocks.top()->append(curblock.cast<ASTNode>());
                             curblock = blocks.top();
                         }
@@ -1116,6 +1145,7 @@ if (stack_hist.empty()) {                                                   \
                         PycRef<ASTBlock> except = new ASTCondBlock(ASTBlock::BLK_EXCEPT, 0, NULL, false);
                         except->init();
                         blocks.push(except);
+                        BLOCKS_NOT_EMPTY_GUARD()
                         curblock = blocks.top();
                     }
                     break;
@@ -1130,8 +1160,10 @@ if (stack_hist.empty()) {                                                   \
                 bool push = true;
 
                 do {
+                    BLOCKS_NOT_EMPTY_GUARD()
                     blocks.pop();
 
+                    BLOCKS_NOT_EMPTY_GUARD()
                     blocks.top()->append(prev.cast<ASTNode>());
 
                     if (prev->blktype() == ASTBlock::BLK_IF
@@ -1157,6 +1189,7 @@ if (stack_hist.empty()) {                                                   \
                         prev = nil;
                     } else if (prev->blktype() == ASTBlock::BLK_ELSE) {
                         /* Special case */
+                        BLOCKS_NOT_EMPTY_GUARD()
                         prev = blocks.top();
                         if (!push) {
                             STACK_HIST_NOT_EMPTY_GUARD()
@@ -1170,6 +1203,7 @@ if (stack_hist.empty()) {                                                   \
 
                 } while (prev != nil);
 
+                BLOCKS_NOT_EMPTY_GUARD()
                 curblock = blocks.top();
             }
             break;
@@ -1184,6 +1218,7 @@ if (stack_hist.empty()) {                                                   \
                         PycRef<ASTBlock> except = new ASTCondBlock(ASTBlock::BLK_EXCEPT, pos+operand, NULL, false);
                         except->init();
                         blocks.push(except);
+                        BLOCKS_NOT_EMPTY_GUARD()
                         curblock = blocks.top();
                     }
                     break;
@@ -1209,8 +1244,10 @@ if (stack_hist.empty()) {                                                   \
                 bool push = true;
 
                 do {
+                    BLOCKS_NOT_EMPTY_GUARD()
                     blocks.pop();
 
+                    // FIXME: Is this actually this way or is a safeguard to prevent crash?
                     if (!blocks.empty())
                         blocks.top()->append(prev.cast<ASTNode>());
 
@@ -1247,6 +1284,7 @@ if (stack_hist.empty()) {                                                   \
                         prev = nil;
                     } else if (prev->blktype() == ASTBlock::BLK_ELSE) {
                         /* Special case */
+                        BLOCKS_NOT_EMPTY_GUARD()
                         prev = blocks.top();
                         if (!push) {
                             STACK_HIST_NOT_EMPTY_GUARD()
@@ -1267,6 +1305,7 @@ if (stack_hist.empty()) {                                                   \
                         stack.pop();
 
                         if (blocks.top()->blktype() == ASTBlock::BLK_CONTAINER) {
+                            BLOCKS_NOT_EMPTY_GUARD()
                             PycRef<ASTContainerBlock> cont = blocks.top().cast<ASTContainerBlock>();
                             if (cont->hasExcept()) {
                                 if (push) {
@@ -1423,8 +1462,10 @@ if (stack_hist.empty()) {                                                   \
                 }
 
                 tmp = curblock;
+                BLOCKS_NOT_EMPTY_GUARD()
                 blocks.pop();
 
+                // FIXME: Is this actually this way or is a safeguard to prevent crash?
                 if (!blocks.empty())
                     curblock = blocks.top();
 
@@ -1438,6 +1479,7 @@ if (stack_hist.empty()) {                                                   \
 
                     PycRef<ASTBlock> blkelse = new ASTBlock(ASTBlock::BLK_ELSE, tmp->end());
                     blocks.push(blkelse);
+                    BLOCKS_NOT_EMPTY_GUARD()
                     curblock = blocks.top();
                 }
 
@@ -1449,7 +1491,9 @@ if (stack_hist.empty()) {                                                   \
                     stack_hist.pop();
 
                     tmp = curblock;
+                    BLOCKS_NOT_EMPTY_GUARD()
                     blocks.pop();
+                    BLOCKS_NOT_EMPTY_GUARD()
                     curblock = blocks.top();
 
                     if (!(tmp->blktype() == ASTBlock::BLK_ELSE
@@ -1464,7 +1508,9 @@ if (stack_hist.empty()) {                                                   \
                     if (tmp->blktype() == ASTBlock::BLK_ELSE && !cont->hasFinally()) {
 
                         /* Pop the container */
+                        BLOCKS_NOT_EMPTY_GUARD()
                         blocks.pop();
+                        BLOCKS_NOT_EMPTY_GUARD()
                         curblock = blocks.top();
                         curblock->append(cont.cast<ASTNode>());
 
@@ -1476,13 +1522,16 @@ if (stack_hist.empty()) {                                                   \
 
                         PycRef<ASTBlock> final = new ASTBlock(ASTBlock::BLK_FINALLY, 0, true);
                         blocks.push(final);
+                        BLOCKS_NOT_EMPTY_GUARD()
                         curblock = blocks.top();
                     }
                 }
 
                 if (curblock->blktype() == ASTBlock::BLK_FOR
                         && curblock->end() == pos) {
+                    BLOCKS_NOT_EMPTY_GUARD()
                     blocks.pop();
+                    BLOCKS_NOT_EMPTY_GUARD()
                     blocks.top()->append(curblock.cast<ASTNode>());
                     curblock = blocks.top();
                 }
@@ -1596,7 +1645,9 @@ if (stack_hist.empty()) {                                                   \
                     stack_hist.pop();
 
                     PycRef<ASTBlock> prev = curblock;
+                    BLOCKS_NOT_EMPTY_GUARD()
                     blocks.pop();
+                    BLOCKS_NOT_EMPTY_GUARD()
                     curblock = blocks.top();
                     curblock->append(prev.cast<ASTNode>());
 
@@ -1619,7 +1670,9 @@ if (stack_hist.empty()) {                                                   \
                     stack_hist.pop();
 
                     PycRef<ASTBlock> prev = curblock;
+                    BLOCKS_NOT_EMPTY_GUARD()
                     blocks.pop();
+                    BLOCKS_NOT_EMPTY_GUARD()
                     curblock = blocks.top();
                     curblock->append(prev.cast<ASTNode>());
 
@@ -1691,7 +1744,9 @@ if (stack_hist.empty()) {                                                   \
                 if (curblock->blktype() == ASTBlock::BLK_WITH
                         && curblock->end() == curpos) {
                     PycRef<ASTBlock> with = curblock;
+                    BLOCKS_NOT_EMPTY_GUARD()
                     blocks.pop();
+                    BLOCKS_NOT_EMPTY_GUARD()
                     curblock = blocks.top();
                     curblock->append(with.cast<ASTNode>());
                 }
@@ -1713,6 +1768,7 @@ if (stack_hist.empty()) {                                                   \
                 stack_hist.push(stack);
                 PycRef<ASTBlock> tryblock = new ASTBlock(ASTBlock::BLK_TRY, pos+operand, true);
                 blocks.push(tryblock.cast<ASTBlock>());
+                BLOCKS_NOT_EMPTY_GUARD()
                 curblock = blocks.top();
 
                 need_try = false;
@@ -1722,6 +1778,7 @@ if (stack_hist.empty()) {                                                   \
             {
                 PycRef<ASTBlock> next = new ASTContainerBlock(pos+operand);
                 blocks.push(next.cast<ASTBlock>());
+                BLOCKS_NOT_EMPTY_GUARD()
                 curblock = blocks.top();
 
                 need_try = true;
@@ -1731,6 +1788,7 @@ if (stack_hist.empty()) {                                                   \
             {
                 PycRef<ASTBlock> next = new ASTCondBlock(ASTBlock::BLK_WHILE, pos+operand, NULL, false);
                 blocks.push(next.cast<ASTBlock>());
+                BLOCKS_NOT_EMPTY_GUARD()
                 curblock = blocks.top();
             }
             break;
