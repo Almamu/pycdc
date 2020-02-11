@@ -1036,21 +1036,19 @@ PycRef<ASTNode> BuildFromCode(PycRef<PycCode> code, PycModule* mod)
                             && curblock.cast<ASTIterBlock>()->isComprehension()) {
                     /* Comprehension condition */
                     curblock.cast<ASTIterBlock>()->setCondition(cond);
-
-                    stack_hist.pop();
-                    blocks.pop();
-                    ifblk = curblock;
+                    stack.pop();
                 } else {
                     /* Plain old if statement */
                     ifblk = new ASTCondBlock(ASTBlock::BLK_IF, offs, cond, neg);
                 }
 
-                /* this could be enclosed in an if (ifblk) but all code-paths should assign it to something */
-                if (popped)
-                    ifblk->init(popped);
+                if (ifblk) {
+                    if (popped)
+                        ifblk->init(popped);
 
-                blocks.push(ifblk.cast<ASTBlock>());
-                curblock = blocks.top();
+                    blocks.push(ifblk.cast<ASTBlock>());
+                    curblock = blocks.top();
+                }
             }
             break;
         case Pyc::JUMP_ABSOLUTE_A:
@@ -1066,7 +1064,12 @@ PycRef<ASTNode> BuildFromCode(PycRef<PycCode> code, PycModule* mod)
                             comp->addGenerator(curblock.cast<ASTIterBlock>());
                         }
 
+                        stack_hist.pop();
+
                         blocks.pop();
+
+                        stack.push(curblock.cast<ASTNode>());
+
                         curblock = blocks.top();
                     } else if (curblock->blktype() == ASTBlock::BLK_ELSE) {
                         stack = stack_hist.top();
@@ -1082,11 +1085,8 @@ PycRef<ASTNode> BuildFromCode(PycRef<PycCode> code, PycModule* mod)
                             blocks.top()->append(curblock.cast<ASTNode>());
                             curblock = blocks.top();
                         }
-                    } else if (curblock->blktype() == ASTBlock::BLK_MAIN) {
-                        // mains cannot have jump_absolute? ignore them
-                        break;
                     } else {
-                        curblock->append(new ASTKeyword(ASTKeyword::KW_CONTINUE));
+                        // curblock->append(new ASTKeyword(ASTKeyword::KW_CONTINUE));
                     }
 
                     /* We're in a loop, this jumps back to the start */
@@ -2267,6 +2267,12 @@ static void print_block(PycRef<ASTBlock> blk, PycModule* mod) {
     }
 
     for (auto ln = lines.cbegin(); ln != lines.cend();) {
+        // ignore continue keywords that are not useful
+        if ((*ln).cast<ASTNode>().type() == ASTNode::NODE_KEYWORD) {
+            ++ln;
+            continue;
+        }
+        
         if ((*ln).cast<ASTNode>().type() != ASTNode::NODE_NODELIST) {
             start_line(cur_indent);
         }
@@ -2448,6 +2454,10 @@ void print_src(PycRef<ASTNode> node, PycModule* mod)
         {
             if (node.cast<ASTBlock>()->blktype() == ASTBlock::BLK_ELSE
                     && node.cast<ASTBlock>()->size() == 0)
+                break;
+
+            // ignore fors that are before a var = [each for each in var if each == true]
+            if (node.cast<ASTBlock>()->blktype() == ASTBlock::BLK_FOR && node.cast<ASTIterBlock>()->isComprehension())
                 break;
 
             if (node.cast<ASTBlock>()->blktype() == ASTBlock::BLK_CONTAINER) {
